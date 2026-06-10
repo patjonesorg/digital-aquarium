@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>Optimized Digital Aquarium</title>
+<style>
+:root{
+--bg:#050b16;
+--text:#f5f5f5;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{width:100%;height:100%;overflow:hidden;background:var(--bg);font-family:Arial,sans-serif}
+body::before{
+content:"";
+position:fixed;inset:-50%;
+background:
+radial-gradient(circle at 20% 30%, rgba(0,255,255,.15), transparent 40%),
+radial-gradient(circle at 80% 20%, rgba(127,255,212,.12), transparent 40%),
+radial-gradient(circle at 50% 70%, rgba(100,149,237,.12), transparent 50%),
+linear-gradient(135deg,#020611,#081a35);
+filter:blur(60px);
+animation:bgmove 20s ease-in-out infinite alternate;
+}
+@keyframes bgmove{
+from{transform:scale(1) rotate(0deg)}
+to{transform:scale(1.08) rotate(2deg)}
+}
+canvas{position:fixed;inset:0}
+#hud{
+position:fixed;top:20px;left:50%;
+transform:translateX(-50%);
+color:white;text-align:center;
+transition:opacity 1s;
+pointer-events:none;
+}
+.hidden{opacity:0}
+h1{letter-spacing:.3em;font-weight:300}
+small{opacity:.7}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="hud">
+<h1>DIGITAL AQUARIUM</h1>
+<small>Move mouse • Click for fullscreen</small>
+</div>
+
+<script>
+const canvas=document.getElementById('c');
+const ctx=canvas.getContext('2d');
+let w,h;
+
+function resize(){
+w=canvas.width=innerWidth;
+h=canvas.height=innerHeight;
+}
+resize();
+addEventListener('resize',resize);
+
+const mouse={x:w/2,y:h/2,active:false};
+
+addEventListener('mousemove',e=>{
+mouse.x=e.clientX;
+mouse.y=e.clientY;
+mouse.active=true;
+showHUD();
+});
+
+addEventListener('click',()=>{
+if(!document.fullscreenElement){
+document.documentElement.requestFullscreen?.();
+}else{
+document.exitFullscreen?.();
+}
+});
+
+const CHAKRAS=[
+"#ff3030","#ff7f30","#ffd630",
+"#30ff80","#30d4ff","#6630ff","#d430ff"
+];
+
+class Grid{
+constructor(size=120){this.size=size;this.map=new Map();}
+clear(){this.map.clear();}
+key(x,y){return ((x/this.size)|0)+":"+((y/this.size)|0);}
+insert(f){
+const k=this.key(f.x,f.y);
+if(!this.map.has(k)) this.map.set(k,[]);
+this.map.get(k).push(f);
+}
+near(f){
+const cx=(f.x/this.size)|0;
+const cy=(f.y/this.size)|0;
+const arr=[];
+for(let x=cx-1;x<=cx+1;x++){
+for(let y=cy-1;y<=cy+1;y++){
+const a=this.map.get(x+":"+y);
+if(a) arr.push(...a);
+}}
+return arr;
+}
+}
+
+class Fish{
+constructor(pred=false){
+this.pred=pred;
+this.depth=Math.random();
+this.x=Math.random()*w;
+this.y=Math.random()*h;
+this.vx=(Math.random()-.5)*2;
+this.vy=(Math.random()-.5)*2;
+this.maxSpeed=pred?3.5:(0.8+this.depth*2);
+this.size=pred?18:(3+this.depth*8);
+this.color=pred?"#ffffff":CHAKRAS[(Math.random()*CHAKRAS.length)|0];
+}
+update(neighbors,dt){
+let ax=0,ay=0;
+
+for(const o of neighbors){
+if(o===this) continue;
+const dx=o.x-this.x;
+const dy=o.y-this.y;
+const d2=dx*dx+dy*dy;
+
+if(d2<9000){
+ax+=o.vx*0.002;
+ay+=o.vy*0.002;
+
+if(d2<900){
+ax-=dx*0.0008;
+ay-=dy*0.0008;
+}
+}
+}
+
+if(mouse.active){
+const dx=mouse.x-this.x;
+const dy=mouse.y-this.y;
+const d=Math.hypot(dx,dy)+1;
+ax+=(dx/d)*0.02;
+ay+=(dy/d)*0.02;
+}
+
+this.vx+=ax*dt;
+this.vy+=ay*dt;
+
+const s=Math.hypot(this.vx,this.vy)||1;
+if(s>this.maxSpeed){
+this.vx=this.vx/s*this.maxSpeed;
+this.vy=this.vy/s*this.maxSpeed;
+}
+
+this.x+=this.vx*dt;
+this.y+=this.vy*dt;
+
+if(this.x<-50)this.x=w+50;
+if(this.x>w+50)this.x=-50;
+if(this.y<-50)this.y=h+50;
+if(this.y>h+50)this.y=-50;
+}
+draw(){
+const a=Math.atan2(this.vy,this.vx);
+ctx.save();
+ctx.translate(this.x,this.y);
+ctx.rotate(a);
+ctx.globalAlpha=.3+.7*this.depth;
+
+const grad=ctx.createLinearGradient(-this.size,0,this.size*2,0);
+grad.addColorStop(0,"rgba(255,255,255,.15)");
+grad.addColorStop(.5,this.color);
+grad.addColorStop(1,"#fff");
+
+ctx.fillStyle=grad;
+ctx.shadowBlur=10;
+ctx.shadowColor=this.color;
+
+ctx.beginPath();
+ctx.moveTo(this.size*2,0);
+ctx.quadraticCurveTo(0,-this.size,-this.size*1.6,0);
+ctx.quadraticCurveTo(0,this.size,this.size*2,0);
+ctx.fill();
+
+ctx.restore();
+}
+}
+
+class Bubble{
+constructor(){this.reset();}
+reset(){
+this.x=Math.random()*w;
+this.y=h+20;
+this.r=1+Math.random()*5;
+this.v=0.5+Math.random()*2;
+}
+update(dt){
+this.y-=this.v*dt;
+if(this.y<-20)this.reset();
+}
+draw(){
+ctx.beginPath();
+ctx.arc(this.x,this.y,this.r,0,Math.PI*2);
+ctx.strokeStyle="rgba(255,255,255,.35)";
+ctx.stroke();
+}
+}
+
+const fishes=[];
+for(let i=0;i<180;i++) fishes.push(new Fish());
+fishes.push(new Fish(true));
+
+const bubbles=[];
+for(let i=0;i<80;i++) bubbles.push(new Bubble());
+
+const grid=new Grid();
+
+let last=performance.now();
+
+function frame(t){
+const dt=Math.min(2,(t-last)/16.666);
+last=t;
+
+ctx.clearRect(0,0,w,h);
+
+grid.clear();
+for(const f of fishes) grid.insert(f);
+
+for(const b of bubbles){
+b.update(dt);
+b.draw();
+}
+
+for(const f of fishes){
+f.update(grid.near(f),dt);
+f.draw();
+}
+
+ctx.fillStyle="rgba(255,255,255,.02)";
+for(let i=0;i<w;i+=80){
+ctx.fillRect(i+Math.sin(t*.001+i)*20,0,20,h);
+}
+
+requestAnimationFrame(frame);
+}
+
+requestAnimationFrame(frame);
+
+const hud=document.getElementById("hud");
+let hudTimer;
+function showHUD(){
+hud.classList.remove("hidden");
+clearTimeout(hudTimer);
+hudTimer=setTimeout(()=>hud.classList.add("hidden"),3000);
+}
+showHUD();
+
+document.addEventListener("visibilitychange",()=>{
+if(!document.hidden) last=performance.now();
+});
+</script>
+</body>
+</html>

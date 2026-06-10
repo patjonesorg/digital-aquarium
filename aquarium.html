@@ -1,0 +1,405 @@
+<!DOCTYPE html><html lang="en"><head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Aquarium</title>
+    <style>
+        :root {
+            --bg-color: #060a13;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --font-sans: 'Helvetica Neue', Arial, sans-serif;
+            --font-serif: 'Didot', 'Bodoni MT', 'Cinzel', serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            overflow: hidden;
+            padding: 2rem;
+            position: relative;
+            cursor: pointer;
+        }
+
+        /* --- Aquamarine, Navy, Cyan, Indigo & White Silk-Water Layer --- */
+        body::before {
+            content: '';
+            position: fixed;
+            top: -50%;
+            left: -50%;
+            right: -50%;
+            bottom: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(circle at 20% 25%, rgba(127, 255, 212, 0.35) 0%, transparent 45%),  
+                radial-gradient(circle at 75% 30%, rgba(6, 26, 64, 0.9) 0%, transparent 55%),       
+                radial-gradient(circle at 40% 70%, rgba(0, 255, 255, 0.25) 0%, transparent 50%),    
+                radial-gradient(circle at 80% 75%, rgba(75, 0, 130, 0.4) 0%, transparent 45%),      
+                radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.18) 0%, transparent 35%),  
+                linear-gradient(135deg, #040814 0%, #0a192f 100%);
+            background-size: 200% 200%;
+            z-index: -3;
+            filter: blur(55px);
+            animation: tropicalOceanFlow 25s ease-in-out infinite alternate;
+            pointer-events: none;
+        }
+
+        body::after {
+            content: '';
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.03) 40%, rgba(127, 255, 212, 0.04) 50%, transparent 60%);
+            background-size: 300% 300%;
+            z-index: -3;
+            filter: blur(20px);
+            animation: silkSheen 18s ease-in-out infinite;
+            pointer-events: none;
+        }
+
+        /* Dual-Canvas Architecture */
+        .fish-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #fishCanvasBack {
+            z-index: -1; 
+            opacity: 0.65; 
+        }
+
+        #fishCanvasFront {
+            z-index: 20; 
+            opacity: 0.9; 
+        }
+
+        /* --- Auto-Fading Interface HUD --- */
+        header, footer {
+            z-index: 10;
+            user-select: none;
+            transition: opacity 1.2s cubic-bezier(0.4, 0, 0.2, 1);
+            opacity: 1; /* Visible on load */
+        }
+
+        /* Global utility class managed via JavaScript to handle inactivity timeout */
+        .hud-hidden header, 
+        .hud-hidden footer {
+            opacity: 0;
+        }
+
+        /* Forces HUD to reveal instantly when cursor physically hovers over them */
+        header:hover, footer:hover {
+            opacity: 1 !important;
+        }
+
+        header {
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+
+        header h1 {
+            font-family: var(--font-serif);
+            font-size: 2rem;
+            font-weight: 300;
+            letter-spacing: 0.3em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.85);
+            margin-bottom: 0.4rem;
+            text-shadow: 0 4px 12px rgba(4, 8, 20, 0.5);
+        }
+
+        header p {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            text-shadow: 0 2px 4px rgba(4, 8, 20, 0.3);
+        }
+
+        footer {
+            margin-bottom: 0.5rem;
+            font-size: 0.75rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #4b5563;
+        }
+
+        @keyframes tropicalOceanFlow {
+            0% { background-position: 0% 30%; transform: scale(1) rotate(0deg); }
+            50% { background-position: 100% 70%; transform: scale(1.05) rotate(2deg); }
+            100% { background-position: 30% 100%; transform: scale(1) rotate(-1deg); }
+        }
+
+        @keyframes silkSheen {
+            0% { background-position: 0% 0%; }
+            50% { background-position: 100% 100%; }
+            100% { background-position: 0% 0%; }
+        }
+    </style></head><body>
+
+    <canvas id="fishCanvasBack" class="fish-layer"></canvas>
+    <canvas id="fishCanvasFront" class="fish-layer"></canvas>
+
+    <header>
+        <h1>Digital Aquarium</h1>
+        <p>Click anywhere to toggle borderless fullscreen</p>
+    </header>
+
+    <footer>
+        &copy; <span id="currentYear"></span> patjones.org. All rights reserved.
+    </footer>
+
+    <script>
+        // Inject current year automatically
+        document.getElementById('currentYear').textContent = new Date().getFullYear();
+
+        const canvasBack = document.getElementById('fishCanvasBack');
+        const ctxBack = canvasBack.getContext('2d');
+        const canvasFront = document.getElementById('fishCanvasFront');
+        const ctxFront = canvasFront.getContext('2d');
+
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+
+        function resizeCanvases() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvasBack.width = canvasFront.width = width;
+            canvasBack.height = canvasFront.height = height;
+        }
+
+        window.addEventListener('resize', resizeCanvases);
+
+        // --- HUD Visibility Controller ---
+        let hudTimeout;
+        
+        function showHUD() {
+            document.body.classList.remove('hud-hidden');
+            clearTimeout(hudTimeout);
+            // Hide interface text after 3 seconds of perfect stillness
+            hudTimeout = setTimeout(() => {
+                document.body.classList.add('hud-hidden');
+            }, 3000);
+        }
+
+        // Event hooks to handle pointer wakes
+        window.addEventListener('mousemove', showHUD);
+        window.addEventListener('touchstart', showHUD);
+        
+        // Prime the fade sequence on startup
+        showHUD();
+
+        // Toggle True Borderless Fullscreen Mode on Click
+        window.addEventListener('click', (e) => {
+            // Prevent the fullscreen toggle if clicking directly on header/footer text zones
+            if (e.target.closest('header') || e.target.closest('footer')) return;
+
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen().catch(err => {
+                    console.log(`Error attempting to enable fullscreen: ${err.message}`);
+                });
+            } else {
+                if (document.exitFullscreen) {
+                    document.exitFullscreen();
+                }
+            }
+        });
+
+        // Chakra configurations containing color profiles and specific behavioral types
+        const CHAKRAS = [
+            { name: "Root",         color: "#FF2A2A", glow: "rgba(255, 42, 42, 0.6)" },
+            { name: "Sacral",       color: "#FF7F2A", glow: "rgba(255, 127, 42, 0.6)" },
+            { name: "Solar Plexus", color: "#FFD42A", glow: "rgba(255, 212, 42, 0.6)" },
+            { name: "Heart",        color: "#2AFF7F", glow: "rgba(42, 255, 127, 0.6)" },
+            { name: "Throat",       color: "#2AD4FF", glow: "rgba(42, 212, 255, 0.6)" },
+            { name: "Third Eye",    color: "#662AFF", glow: "rgba(102, 42, 255, 0.6)" },
+            { name: "Crown",        color: "#D42AFF", glow: "rgba(212, 42, 255, 0.6)" }
+        ];
+
+        const INITIAL_FISH_PER_CHAKRA = 4; // Total starting fish: 28
+        const MAX_FISH = 120;
+
+        class Fish {
+            constructor(spawnOnEdges = false, chakraData = null) {
+                this.isForeground = Math.random() > 0.5;
+                this.chakra = chakraData || CHAKRAS[Math.floor(Math.random() * CHAKRAS.length)];
+
+                if (spawnOnEdges) {
+                    this.x = Math.random() > 0.5 ? -40 : width + 40;
+                    this.y = Math.random() * height;
+                } else {
+                    this.x = Math.random() * width;
+                    this.y = Math.random() * height;
+                }
+                
+                this.vx = (Math.random() * 2 - 1);
+                this.vy = (Math.random() * 2 - 1);
+                
+                this.baseSize = this.isForeground ? (Math.random() * 3 + 5) : (Math.random() * 2 + 3); 
+                this.size = this.baseSize;
+                this.maxSpeed = this.isForeground ? (Math.random() * 1.2 + 1.8) : (Math.random() * 0.8 + 1.1);
+                this.maxForce = 0.03;
+                
+                this.tailWagSpeed = Math.random() * 0.10 + 0.15;
+                this.tailWagPhase = Math.random() * Math.PI * 2;
+            }
+
+            update() {
+                this.tailWagPhase += this.tailWagSpeed;
+
+                let speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+                if (speed > this.maxSpeed) {
+                    this.vx = (this.vx / speed) * this.maxSpeed;
+                    this.vy = (this.vy / speed) * this.maxSpeed;
+                }
+
+                this.x += this.vx;
+                this.y += this.vy;
+
+                const buffer = 50;
+                if (this.x < -buffer) this.x = width + buffer;
+                if (this.x > width + buffer) this.x = -buffer;
+                if (this.y < -buffer) this.y = height + buffer;
+                if (this.y > height + buffer) this.y = -buffer;
+            }
+
+            flock(fishes) {
+                let sepX = 0, sepY = 0, aliX = 0, aliY = 0, cohX = 0, cohY = 0;
+                let sepCount = 0, matchCount = 0;
+
+                const perceiveRadius = 90;
+                const separationRadius = 32;
+
+                for (let i = 0; i < fishes.length; i++) {
+                    let other = fishes[i];
+                    if (other === this) continue;
+
+                    let dx = other.x - this.x;
+                    let dy = other.y - this.y;
+                    let dist = Math.sqrt(dx * dx + dy * dy);
+
+                    if (dist < perceiveRadius) {
+                        let affinity = (other.chakra.name === this.chakra.name) ? 1.5 : 1.0;
+
+                        aliX += other.vx * affinity;
+                        aliY += other.vy * affinity;
+                        cohX += other.x * affinity;
+                        cohY += other.y * affinity;
+                        matchCount++;
+
+                        if (dist < separationRadius) {
+                            sepX -= dx / dist;
+                            sepY -= dy / dist;
+                            sepCount++;
+                        }
+                    }
+                }
+
+                if (matchCount > 0) {
+                    aliX /= matchCount; aliY /= matchCount;
+                    let aliSpeed = Math.sqrt(aliX * aliX + aliY * aliY);
+                    if (aliSpeed > 0) {
+                        aliX = (aliX / aliSpeed) * this.maxSpeed - this.vx;
+                        aliY = (aliY / aliSpeed) * this.maxSpeed - this.vy;
+                    }
+                    cohX /= matchCount; cohY /= matchCount;
+                    cohX -= this.x; cohY -= this.y;
+                    let cohSpeed = Math.sqrt(cohX * cohX + cohY * cohY);
+                    if (cohSpeed > 0) {
+                        cohX = (cohX / cohSpeed) * this.maxSpeed - this.vx;
+                        cohY = (cohY / cohSpeed) * this.maxSpeed - this.vy;
+                    }
+                    this.vx += (aliX * this.maxForce) + (cohX * this.maxForce * 0.3);
+                    this.vy += (aliY * this.maxForce) + (cohY * this.maxForce * 0.3);
+                }
+
+                if (sepCount > 0) {
+                    this.vx += sepX * this.maxForce * 2.0;
+                    this.vy += sepY * this.maxForce * 2.0;
+                }
+            }
+
+            draw(ctx) {
+                let angle = Math.atan2(this.vy, this.vx);
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(angle);
+
+                let gradient = ctx.createLinearGradient(-this.size, 0, this.size * 1.5, 0);
+                gradient.addColorStop(0, 'rgba(255,255,255,0.15)');
+                gradient.addColorStop(0.4, this.chakra.color);
+                gradient.addColorStop(1, '#ffffff');
+
+                ctx.shadowBlur = this.isForeground ? 15 : 6;
+                ctx.shadowColor = this.chakra.glow;
+
+                ctx.fillStyle = gradient;
+                ctx.beginPath();
+
+                let tailWag = Math.sin(this.tailWagPhase) * (this.size * 0.5);
+                ctx.moveTo(this.size * 1.8, 0); 
+                ctx.quadraticCurveTo(0, -this.size * 0.55, -this.size, tailWag); 
+                ctx.lineTo(-this.size * 1.4, tailWag + Math.sin(this.tailWagPhase) * 2.5); 
+                ctx.quadraticCurveTo(0, this.size * 0.55, this.size * 1.8, 0); 
+                
+                ctx.closePath();
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        let school = [];
+        function initSchool() {
+            school = [];
+            for (let c = 0; c < CHAKRAS.length; c++) {
+                for (let i = 0; i < INITIAL_FISH_PER_CHAKRA; i++) {
+                    school.push(new Fish(false, CHAKRAS[c]));
+                }
+            }
+        }
+
+        resizeCanvases();
+        initSchool();
+
+        setInterval(() => {
+            if (school.length < MAX_FISH) {
+                school.push(new Fish(true));
+            }
+        }, 3000);
+
+        function animate() {
+            ctxBack.clearRect(0, 0, width, height);
+            ctxFront.clearRect(0, 0, width, height);
+
+            for (let i = 0; i < school.length; i++) {
+                let fish = school[i];
+                fish.flock(school);
+                fish.update();
+                
+                if (fish.isForeground) {
+                    fish.draw(ctxFront);
+                } else {
+                    fish.draw(ctxBack);
+                }
+            }
+
+            requestAnimationFrame(animate);
+        }
+
+        animate();
+    </script></body></html>

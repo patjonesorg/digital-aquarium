@@ -1,0 +1,609 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Digital Aquarium</title>
+    <style>
+        :root {
+            --bg-color: #060a13;
+            --text-primary: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --accent: #67e8f9;
+            --font-sans: 'Helvetica Neue', Arial, sans-serif;
+            --font-serif: 'Didot', 'Bodoni MT', 'Cinzel', serif;
+        }
+        
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            overflow: hidden;
+            padding: 2rem;
+            position: relative;
+            cursor: pointer;
+            touch-action: none;
+        }
+        
+        /* Enhanced Ocean Background */
+        body::before {
+            content: '';
+            position: fixed;
+            inset: -50%;
+            width: 200%;
+            height: 200%;
+            background: 
+                radial-gradient(circle at 20% 25%, rgba(127, 255, 212, 0.35) 0%, transparent 45%),
+                radial-gradient(circle at 75% 30%, rgba(6, 26, 64, 0.9) 0%, transparent 55%),
+                radial-gradient(circle at 40% 70%, rgba(0, 255, 255, 0.25) 0%, transparent 50%),
+                radial-gradient(circle at 80% 75%, rgba(75, 0, 130, 0.4) 0%, transparent 45%),
+                radial-gradient(circle at 50% 45%, rgba(255, 255, 255, 0.18) 0%, transparent 35%),
+                linear-gradient(135deg, #040814 0%, #0a192f 100%);
+            background-size: 200% 200%;
+            z-index: -3;
+            filter: blur(55px);
+            animation: tropicalOceanFlow 28s ease-in-out infinite alternate;
+            pointer-events: none;
+        }
+        
+        body::after {
+            content: '';
+            position: fixed;
+            inset: 0;
+            background: linear-gradient(120deg, transparent 30%, rgba(255,255,255,0.03) 40%, rgba(127, 255, 212, 0.04) 50%, transparent 60%);
+            background-size: 300% 300%;
+            z-index: -3;
+            filter: blur(20px);
+            animation: silkSheen 18s ease-in-out infinite;
+            pointer-events: none;
+        }
+        
+        /* Canvases */
+        .fish-layer {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #fishCanvasBack { z-index: -1; opacity: 0.75; }
+        #fishCanvasFront { z-index: 20; opacity: 0.95; }
+        
+        /* HUD */
+        header, footer, #controls {
+            z-index: 30;
+            user-select: none;
+            transition: opacity 1s cubic-bezier(0.4, 0, 0.2, 1);
+        }
+        
+        .hud-hidden header,
+        .hud-hidden footer,
+        .hud-hidden #controls {
+            opacity: 0;
+            pointer-events: none;
+        }
+        
+        header:hover, footer:hover, #controls:hover {
+            opacity: 1 !important;
+        }
+        
+        header {
+            text-align: center;
+            margin-top: 1.5rem;
+        }
+        
+        header h1 {
+            font-family: var(--font-serif);
+            font-size: clamp(1.8rem, 5vw, 2.8rem);
+            font-weight: 300;
+            letter-spacing: 0.35em;
+            text-transform: uppercase;
+            color: rgba(255, 255, 255, 0.9);
+            text-shadow: 0 4px 20px rgba(4, 8, 20, 0.6);
+        }
+        
+        header p {
+            font-size: 0.8rem;
+            color: var(--text-secondary);
+            letter-spacing: 0.2em;
+            text-transform: uppercase;
+            margin-top: 0.5rem;
+        }
+        
+        #controls {
+            position: fixed;
+            top: 1rem;
+            right: 1rem;
+            background: rgba(6, 10, 19, 0.75);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(103, 232, 249, 0.2);
+            border-radius: 12px;
+            padding: 12px 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            min-width: 180px;
+        }
+        
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 0.8rem;
+        }
+        
+        label {
+            color: var(--text-secondary);
+            white-space: nowrap;
+            flex-shrink: 0;
+        }
+        
+        input[type="range"] {
+            accent-color: var(--accent);
+            flex: 1;
+        }
+        
+        button {
+            background: rgba(103, 232, 249, 0.15);
+            color: var(--accent);
+            border: 1px solid rgba(103, 232, 249, 0.3);
+            padding: 6px 12px;
+            border-radius: 8px;
+            font-size: 0.75rem;
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        button:hover {
+            background: rgba(103, 232, 249, 0.3);
+            transform: translateY(-1px);
+        }
+        
+        footer {
+            margin-bottom: 0.75rem;
+            font-size: 0.75rem;
+            letter-spacing: 0.15em;
+            text-transform: uppercase;
+            color: #4b5563;
+            text-align: center;
+        }
+        
+        /* Animations */
+        @keyframes tropicalOceanFlow {
+            0% { background-position: 0% 30%; transform: scale(1) rotate(0deg); }
+            50% { background-position: 100% 70%; transform: scale(1.04) rotate(1.5deg); }
+            100% { background-position: 30% 100%; transform: scale(1) rotate(-1deg); }
+        }
+        
+        @keyframes silkSheen {
+            0% { background-position: 0% 0%; }
+            50% { background-position: 100% 100%; }
+            100% { background-position: 0% 0%; }
+        }
+        
+        .toast {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(6, 10, 19, 0.9);
+            color: var(--accent);
+            padding: 10px 20px;
+            border-radius: 9999px;
+            font-size: 0.85rem;
+            white-space: nowrap;
+            z-index: 100;
+            opacity: 0;
+            transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+            pointer-events: none;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+    </style>
+</head>
+<body>
+    <canvas id="fishCanvasBack" class="fish-layer"></canvas>
+    <canvas id="fishCanvasFront" class="fish-layer"></canvas>
+    
+    <header>
+        <h1>Digital Aquarium</h1>
+        <p>Move • Breathe • Watch</p>
+    </header>
+    
+    <div id="controls">
+        <div class="control-group">
+            <label>Fish: <span id="fishCount">28</span></label>
+            <input type="range" id="fishSlider" min="10" max="180" value="28">
+        </div>
+        <div class="control-group">
+            <label>Speed</label>
+            <input type="range" id="speedSlider" min="30" max="180" value="100">
+        </div>
+        <button id="pauseBtn">Pause</button>
+        <button id="resetBtn">Reset School</button>
+    </div>
+    
+    <footer>
+        © <span id="currentYear"></span> patjones.org • Click to toggle fullscreen
+    </footer>
+    
+    <div id="toast" class="toast"></div>
+
+    <script>
+        // DOM elements
+        const canvasBack = document.getElementById('fishCanvasBack');
+        const ctxBack = canvasBack.getContext('2d', { alpha: true });
+        const canvasFront = document.getElementById('fishCanvasFront');
+        const ctxFront = canvasFront.getContext('2d', { alpha: true });
+        
+        const fishSlider = document.getElementById('fishSlider');
+        const speedSlider = document.getElementById('speedSlider');
+        const fishCountEl = document.getElementById('fishCount');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const toast = document.getElementById('toast');
+        
+        let width = window.innerWidth;
+        let height = window.innerHeight;
+        let school = [];
+        let isPaused = false;
+        let lastTime = performance.now();
+        let globalSpeedMultiplier = 1.0;
+        
+        // Chakra data
+        const CHAKRAS = [
+            { name: "Root", color: "#FF2A2A", glow: "rgba(255, 42, 42, 0.7)" },
+            { name: "Sacral", color: "#FF7F2A", glow: "rgba(255, 127, 42, 0.7)" },
+            { name: "Solar Plexus", color: "#FFD42A", glow: "rgba(255, 212, 42, 0.7)" },
+            { name: "Heart", color: "#2AFF7F", glow: "rgba(42, 255, 127, 0.7)" },
+            { name: "Throat", color: "#2AD4FF", glow: "rgba(42, 212, 255, 0.7)" },
+            { name: "Third Eye", color: "#662AFF", glow: "rgba(102, 42, 255, 0.7)" },
+            { name: "Crown", color: "#D42AFF", glow: "rgba(212, 42, 255, 0.7)" }
+        ];
+        
+        const MAX_FISH = 180;
+        
+        class Fish {
+            constructor(spawnOnEdges = false, chakraData = null) {
+                this.isForeground = Math.random() > 0.45;
+                this.chakra = chakraData || CHAKRAS[Math.floor(Math.random() * CHAKRAS.length)];
+                
+                if (spawnOnEdges) {
+                    this.x = Math.random() > 0.5 ? -60 : width + 60;
+                    this.y = Math.random() * height;
+                } else {
+                    this.x = Math.random() * width;
+                    this.y = Math.random() * height;
+                }
+                
+                this.vx = (Math.random() * 2.2 - 1.1);
+                this.vy = (Math.random() * 2.2 - 1.1);
+                
+                this.baseSize = this.isForeground ? 
+                    (Math.random() * 4 + 6) : 
+                    (Math.random() * 2.5 + 3.5);
+                this.size = this.baseSize;
+                
+                this.maxSpeed = this.isForeground ? 
+                    (Math.random() * 1.4 + 2.1) : 
+                    (Math.random() * 0.9 + 1.3);
+                
+                this.maxForce = 0.035;
+                this.tailWagSpeed = Math.random() * 0.12 + 0.16;
+                this.tailWagPhase = Math.random() * Math.PI * 2;
+                this.hueShift = Math.random() * 8 - 4; // subtle color variation
+            }
+            
+            update() {
+                this.tailWagPhase += this.tailWagSpeed;
+                
+                let speed = Math.hypot(this.vx, this.vy);
+                if (speed > this.maxSpeed * globalSpeedMultiplier) {
+                    const factor = (this.maxSpeed * globalSpeedMultiplier) / speed;
+                    this.vx *= factor;
+                    this.vy *= factor;
+                }
+                
+                this.x += this.vx;
+                this.y += this.vy;
+                
+                // Wrap around with buffer
+                const buffer = 80;
+                if (this.x < -buffer) this.x = width + buffer;
+                if (this.x > width + buffer) this.x = -buffer;
+                if (this.y < -buffer) this.y = height + buffer;
+                if (this.y > height + buffer) this.y = -buffer;
+            }
+            
+            flock(fishes) {
+                let sepX = 0, sepY = 0, aliX = 0, aliY = 0, cohX = 0, cohY = 0;
+                let sepCount = 0, matchCount = 0;
+                
+                const perceiveRadius = 95;
+                const separationRadius = 34;
+                
+                for (let i = 0; i < fishes.length; i++) {
+                    const other = fishes[i];
+                    if (other === this) continue;
+                    
+                    const dx = other.x - this.x;
+                    const dy = other.y - this.y;
+                    const distSq = dx * dx + dy * dy;
+                    
+                    if (distSq < perceiveRadius * perceiveRadius && distSq > 0) {
+                        const dist = Math.sqrt(distSq);
+                        const affinity = (other.chakra.name === this.chakra.name) ? 1.6 : 1.0;
+                        
+                        aliX += other.vx * affinity;
+                        aliY += other.vy * affinity;
+                        cohX += other.x * affinity;
+                        cohY += other.y * affinity;
+                        matchCount++;
+                        
+                        if (dist < separationRadius) {
+                            const sepForce = separationRadius / (dist + 1);
+                            sepX -= dx * sepForce;
+                            sepY -= dy * sepForce;
+                            sepCount++;
+                        }
+                    }
+                }
+                
+                if (matchCount > 0) {
+                    // Alignment
+                    aliX /= matchCount;
+                    aliY /= matchCount;
+                    let aliMag = Math.hypot(aliX, aliY);
+                    if (aliMag > 0.001) {
+                        aliX = (aliX / aliMag) * this.maxSpeed - this.vx;
+                        aliY = (aliY / aliMag) * this.maxSpeed - this.vy;
+                    }
+                    
+                    // Cohesion
+                    cohX = (cohX / matchCount) - this.x;
+                    cohY = (cohY / matchCount) - this.y;
+                    let cohMag = Math.hypot(cohX, cohY);
+                    if (cohMag > 0.001) {
+                        cohX = (cohX / cohMag) * this.maxSpeed * 0.8 - this.vx;
+                        cohY = (cohY / cohMag) * this.maxSpeed * 0.8 - this.vy;
+                    }
+                    
+                    this.vx += (aliX * this.maxForce) + (cohX * this.maxForce * 0.35);
+                    this.vy += (aliY * this.maxForce) + (cohY * this.maxForce * 0.35);
+                }
+                
+                if (sepCount > 0) {
+                    this.vx += sepX * this.maxForce * 2.4;
+                    this.vy += sepY * this.maxForce * 2.4;
+                }
+            }
+            
+            draw(ctx) {
+                const angle = Math.atan2(this.vy, this.vx);
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                ctx.rotate(angle);
+                
+                const grad = ctx.createLinearGradient(-this.size * 1.1, 0, this.size * 2.2, 0);
+                grad.addColorStop(0, 'rgba(255,255,255,0.25)');
+                grad.addColorStop(0.35, this.chakra.color);
+                grad.addColorStop(1, '#ffffff');
+                
+                ctx.shadowBlur = this.isForeground ? 18 : 8;
+                ctx.shadowColor = this.chakra.glow;
+                ctx.fillStyle = grad;
+                
+                ctx.beginPath();
+                const tailWag = Math.sin(this.tailWagPhase) * (this.size * 0.6);
+                ctx.moveTo(this.size * 2.1, 0);
+                ctx.quadraticCurveTo(0, -this.size * 0.62, -this.size * 1.05, tailWag);
+                ctx.lineTo(-this.size * 1.55, tailWag * 0.8 + Math.sin(this.tailWagPhase * 1.8) * 3);
+                ctx.quadraticCurveTo(0, this.size * 0.62, this.size * 2.1, 0);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Eye highlight
+                ctx.fillStyle = 'rgba(255,255,255,0.9)';
+                ctx.beginPath();
+                ctx.arc(this.size * 0.6, -this.size * 0.18, this.size * 0.18, 0, Math.PI * 2);
+                ctx.fill();
+                
+                ctx.restore();
+            }
+        }
+        
+        function resizeCanvases() {
+            width = window.innerWidth;
+            height = window.innerHeight;
+            canvasBack.width = canvasFront.width = width;
+            canvasBack.height = canvasFront.height = height;
+        }
+        
+        function initSchool(targetCount) {
+            school = [];
+            const perChakra = Math.max(2, Math.floor(targetCount / CHAKRAS.length));
+            
+            for (let c = 0; c < CHAKRAS.length; c++) {
+                for (let i = 0; i < perChakra; i++) {
+                    school.push(new Fish(false, CHAKRAS[c]));
+                }
+            }
+            
+            // Fill any remainder
+            while (school.length < targetCount) {
+                school.push(new Fish(false));
+            }
+        }
+        
+        function showToast(message, duration = 1800) {
+            toast.textContent = message;
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateX(-50%) translateY(0)';
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                toast.style.transform = 'translateX(-50%) translateY(20px)';
+            }, duration);
+        }
+        
+        // HUD controller
+        let hudTimeout;
+        function showHUD() {
+            document.body.classList.remove('hud-hidden');
+            clearTimeout(hudTimeout);
+            hudTimeout = setTimeout(() => {
+                document.body.classList.add('hud-hidden');
+            }, 4200);
+        }
+        
+        // Animation loop
+        function animate() {
+            if (isPaused) {
+                requestAnimationFrame(animate);
+                return;
+            }
+            
+            ctxBack.clearRect(0, 0, width, height);
+            ctxFront.clearRect(0, 0, width, height);
+            
+            const now = performance.now();
+            const dt = Math.min((now - lastTime) / 16, 2.5); // frame time normalization
+            lastTime = now;
+            
+            for (let i = 0; i < school.length; i++) {
+                const fish = school[i];
+                fish.flock(school);
+                fish.update();
+                
+                if (fish.isForeground) {
+                    fish.draw(ctxFront);
+                } else {
+                    fish.draw(ctxBack);
+                }
+            }
+            
+            requestAnimationFrame(animate);
+        }
+        
+        // Event listeners
+        function setupEventListeners() {
+            window.addEventListener('resize', () => {
+                resizeCanvases();
+            });
+            
+            // HUD
+            window.addEventListener('mousemove', showHUD);
+            window.addEventListener('touchstart', showHUD);
+            window.addEventListener('touchmove', showHUD);
+            showHUD();
+            
+            // Fullscreen toggle
+            document.addEventListener('click', (e) => {
+                if (e.target.closest('header') || 
+                    e.target.closest('footer') || 
+                    e.target.closest('#controls')) return;
+                
+                if (!document.fullscreenElement) {
+                    document.documentElement.requestFullscreen().catch(() => {});
+                } else {
+                    document.exitFullscreen();
+                }
+            });
+            
+            // Controls
+            fishSlider.addEventListener('input', () => {
+                const target = parseInt(fishSlider.value);
+                fishCountEl.textContent = target;
+                
+                if (target > school.length) {
+                    // Add fish
+                    while (school.length < target && school.length < MAX_FISH) {
+                        school.push(new Fish(true));
+                    }
+                } else if (target < school.length) {
+                    // Remove from back
+                    school.length = target;
+                }
+            });
+            
+            speedSlider.addEventListener('input', () => {
+                globalSpeedMultiplier = parseInt(speedSlider.value) / 100;
+            });
+            
+            pauseBtn.addEventListener('click', () => {
+                isPaused = !isPaused;
+                pauseBtn.textContent = isPaused ? 'Resume' : 'Pause';
+                showToast(isPaused ? '⏸️ Paused' : '▶️ Resumed');
+            });
+            
+            resetBtn.addEventListener('click', () => {
+                const target = parseInt(fishSlider.value);
+                initSchool(target);
+                showToast('School reset 🌊');
+            });
+            
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.key === 'p' || e.key === 'P') {
+                    pauseBtn.click();
+                }
+                if (e.key === 'r' || e.key === 'R') {
+                    resetBtn.click();
+                }
+                if (e.key === 'f' || e.key === 'F') {
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen();
+                    } else {
+                        document.exitFullscreen();
+                    }
+                }
+            });
+        }
+        
+        // Initialize
+        function init() {
+            document.getElementById('currentYear').textContent = new Date().getFullYear();
+            
+            resizeCanvases();
+            initSchool(42); // Nice starting number
+            fishSlider.value = 42;
+            fishCountEl.textContent = 42;
+            
+            setupEventListeners();
+            animate();
+            
+            // Spawn occasional new fish
+            setInterval(() => {
+                if (!isPaused && school.length < MAX_FISH && Math.random() < 0.6) {
+                    school.push(new Fish(true));
+                    if (school.length % 12 === 0) {
+                        fishSlider.value = Math.min(MAX_FISH, school.length);
+                        fishCountEl.textContent = school.length;
+                    }
+                }
+            }, 2800);
+            
+            // Welcome toast
+            setTimeout(() => {
+                showToast('Welcome to the aquarium 🐟', 2200);
+            }, 800);
+        }
+        
+        // Start the experience
+        window.onload = init;
+    </script>
+</body>
+</html>
