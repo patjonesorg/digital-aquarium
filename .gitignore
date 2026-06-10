@@ -1,0 +1,34 @@
+# Operating System Files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDEs, Editors, and Workspaces
+.idea/
+.project
+.classpath
+.c9/
+*.launch
+*.sublime-project
+*.sublime-workspace
+.vscode/
+*.swp
+*.swo
+
+# Web Server / Environment Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Local Environment Configs (if you use backend keys/tokens later)
+.env
+.env.local
+.env.production
+.env.development.local
+.env.local.errors
